@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>appId</key>
+	<string>application-0-vswpq</string>
+	<key>appUrl</key>
+	<string>https://realm.mongodb.com/groups/6570bee01f12de30b637c115/apps/6570fddd1eab11f1da66fd40</string>
+	<key>baseUrl</key>
+	<string>https://realm.mongodb.com</string>
+	<key>clientApiBaseUrl</key>
+	<string>https://us-central1.gcp.realm.mongodb.com</string>
+	<key>dataApiBaseUrl</key>
+	<string>https://us-central1.gcp.data.mongodb-api.com</string>
+    <key>dataExplorerLink</key>
+    <string>https://cloud.mongodb.com/links/6570bee01f12de30b637c115/explorer/SMU-HardGameCluster/database/collection/find</string>
+    <key>dataSourceName</key>
+    <string>mongodb-atlas</string>
+</dict>
+</plist>
