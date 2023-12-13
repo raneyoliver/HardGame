@@ -1,5 +1,7 @@
 # Hard Game
 
+![79735](https://github.com/raneyoliver/HardGame/assets/40372643/9a45c0bb-fcf0-46b1-a6c0-bf907ccd90ed)
+
 ## Notes for the grader
 
 The third constraint is currently in a basic form. While the leaderboard successfully displays updates with new enemy defeats, the feature's refinement and polish are still in progress. However, the core functionality is operational.
