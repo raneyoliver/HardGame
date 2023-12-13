@@ -8,6 +8,7 @@
 
 import UIKit
 import SpriteKit
+import RealmSwift
 
 let SERVER_URL = "http://192.168.1.48:8000" // change this for your server name!!!
 
@@ -22,12 +23,18 @@ class GameViewController: UIViewController {
         else {
             modelButton.setTitle("KNN", for: .normal)
         }
-        scene.model = sender.currentTitle!
+        //scene.model = sender.currentTitle!
     }
     
     override func viewDidLoad() {
             super.viewDidLoad()
 
+            print("GameViewController loaded")
+        
+        
+        
+        
+        
             if let view = self.view as? SKView {
                 // Create and configure the scene
                 scene = GameScene2(size: view.bounds.size)
@@ -38,8 +45,27 @@ class GameViewController: UIViewController {
                 
                 view.ignoresSiblingOrder = true
             }
+
+        
+            let button = UIButton(frame: CGRect(x: 20, y: 50, width: 150, height: 50))
+            button.setTitle("Leaderboards", for: .normal)
+            button.backgroundColor = .blue
+            button.addTarget(self, action: #selector(navigateButtonPressed), for: .touchUpInside)
+            self.view.addSubview(button)
         }
     
+    @objc func navigateButtonPressed() {
+            self.performSegue(withIdentifier: "showTableSegue", sender: self)
+        }
+    
+    override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
+        if segue.identifier == "yourSegueIdentifier" {
+            if let tableViewController = segue.destination as? LeaderboardTableViewController {
+                // Configure tableViewController as needed
+            }
+        }
+    }
+
 
     /*
     // MARK: - Navigation
@@ -52,3 +78,4 @@ class GameViewController: UIViewController {
     */
 
 }
+

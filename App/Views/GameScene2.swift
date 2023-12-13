@@ -8,11 +8,13 @@
 
 import UIKit
 import SpriteKit
+import RealmSwift
+import CoreML
 
 enum Move {
     case left
     case right
-
+    
     var numericValue: Double {
         switch self {
         case .left:
@@ -24,24 +26,35 @@ enum Move {
 }
 
 struct GameData {
-    var playerMoves: [Move]
-    var enemyMoves: [Move]
-    var outcome: CGFloat
+    var playerX: Double
+    var playerY: Double
+    var enemyX: Double
+    var enemyY: Double
+    var missileX: Double
+    var missileY: Double
+    var enemyMissileX: Double
+    var enemyMissileY: Double
+    var enemyPotentialMove: String
 }
 
+struct MoveData: Codable {
+    var playerX: Double
+    var playerY: Double
+    var enemyX: Double
+    var enemyY: Double
+    var missileX: Double
+    var missileY: Double
+    var enemyMissileX: Double
+    var enemyMissileY: Double
+    var enemyMove: Double
+    var outcome: Double
+}
+
+let flask_app_url:String = "https://hardgameflaskapp.uc.r.appspot.com"
 
 class GameScene2: SKScene, URLSessionDelegate {
-    lazy var session: URLSession = {
-        let sessionConfig = URLSessionConfiguration.ephemeral
-        
-        sessionConfig.timeoutIntervalForRequest = 20.0
-        sessionConfig.timeoutIntervalForResource = 20.0
-        sessionConfig.httpMaximumConnectionsPerHost = 1
-        
-        return URLSession(configuration: sessionConfig,
-            delegate: self,
-            delegateQueue:self.operationQueue)
-    }()
+    
+    let gameAIManager:GameAIManager = GameAIManager()
     
     let operationQueue = OperationQueue()
     
@@ -52,14 +65,7 @@ class GameScene2: SKScene, URLSessionDelegate {
     var enemyMissileNode: SKSpriteNode!
     var enemyNode = SKSpriteNode(imageNamed: "enemy")
     
-    var nextEnemyMove:String = ""
-    
-    // change model according to button title
-    var model = "KNN" {
-        didSet {
-            changeModel(to: model)
-        }
-    }
+    var nextEnemyMove:Double = -1.0
     
     let gridSize = 4
     let sidePadding = 10.0
@@ -70,7 +76,7 @@ class GameScene2: SKScene, URLSessionDelegate {
     var missilePosition: CGPoint?
     var enemyMissilePosition: CGPoint?
     var tapCount = 0
-
+    
     enum PhysicsCategory {
         static let none: UInt32 = 0
         static let missile: UInt32 = 0x1            // 1
@@ -78,29 +84,56 @@ class GameScene2: SKScene, URLSessionDelegate {
         static let player: UInt32 = 0x1 << 2        // 4
     }
     
-    var currentGame = GameData(playerMoves: [], enemyMoves: [], outcome: -1.0)
+    var currentGameData = GameData(playerX: 0.0, playerY: 0.0, enemyX: 0.0, enemyY: 0.0, missileX: 0.0, missileY: 0.0, enemyMissileX: 0.0, enemyMissileY: 0.0, enemyPotentialMove: "")
+    
+    var allMoves:[MoveData] = []
+    
+    func playMoveSound() {
+        let playSound = SKAction.playSoundFileNamed("move.wav", waitForCompletion: false)
+        self.run(playSound)
+    }
+    
+    func playKillSound() {
+        let playSound = SKAction.playSoundFileNamed("kill.mp3", waitForCompletion: false)
+        self.run(playSound)
+    }
+    
+    func triggerHapticFeedback() {
+        let feedbackGenerator = UIImpactFeedbackGenerator(style: .rigid)
+        feedbackGenerator.prepare()
+        feedbackGenerator.impactOccurred()
+    }
 
+    
     // move player across grid
     func playerDidMove(_ move: Move) {
-        currentGame.playerMoves.append(move)
+        
+        // if player moving, enemy wasn't hit on previous move
+        let previousEnemyMove = MoveData(playerX: playerNode.position.x, playerY: playerNode.position.y, enemyX: enemyNode.position.x, enemyY: enemyNode.position.y, missileX: Double(missileNode?.position.x ?? -1.0), missileY: Double(missileNode?.position.y ?? -1.0), enemyMissileX: Double(enemyMissileNode?.position.x ?? -1.0), enemyMissileY: Double(enemyMissileNode?.position.y ?? -1.0), enemyMove: nextEnemyMove, outcome: 0.0)
+        
+        allMoves.append(previousEnemyMove)
+        
         switch move {
-            case .left:
+        case .left:
             if playerPosition.x > 0 {
                 playerPosition.x -= 1
             }
-            case .right:
+        case .right:
             if playerPosition.x < CGFloat(gridSize) - 1 {
                 playerPosition.x += 1
             }
         }
         
+        playMoveSound()
+        triggerHapticFeedback()
+        
         //can't move while enemy moving
         playerCanMove = false
-
+        
         // enemy moves 1 second after you
         scheduleEnemyMove()
     }
-
+    
     func scheduleEnemyMove() {
         let wait = SKAction.wait(forDuration: 1.0)
         let performEnemyMove = SKAction.run {
@@ -108,17 +141,16 @@ class GameScene2: SKScene, URLSessionDelegate {
         }
         run(SKAction.sequence([wait, performEnemyMove]))
     }
-
+    
     func enemyMove() {
-
-        // predicts the next move based on all of the moves leading up to this move.
-         // may choose left or right, cannot go above 1000 moves
-        getPrediction(convertGameDataToFeatureVector(currentGame, maxMoves: 1000))
-
-        if self.nextEnemyMove == "Left" {
+        // Assume gameAIManager has already loaded the model
+        
+        let bestMove = gameAIManager.predictBestMove(gameData: currentGameData)
+        
+        if bestMove == "left" {
             enemyDidMove(.left)
         }
-        else if self.nextEnemyMove == "Right" {
+        else if bestMove == "right" {
             enemyDidMove(.right)
         }
         else {
@@ -127,13 +159,15 @@ class GameScene2: SKScene, URLSessionDelegate {
             //enemyDidMove(.right)
         }
         
+        triggerHapticFeedback()
         
     }
-
-
+    
+    
     // same as player did move()
     func enemyDidMove(_ move: Move) {
-        currentGame.enemyMoves.append(move)
+        
+        
         // allow player to move afterward
         playerCanMove = true
         switch move {
@@ -148,201 +182,110 @@ class GameScene2: SKScene, URLSessionDelegate {
             
         }
     }
-
+    
     // ends the game (needs work)
-    func endGame(playerWon: Bool) {
-        // 1.0 == enemy wins
-        currentGame.outcome = playerWon ? 0.0 : 1.0
+    func endGame(playerWon: Bool) async {
         
-        // adds a sample feature vector to the model
-        addDataPoint(currentGame)
+        if (playerWon) {
+            await addDataPoint()
+        }
         
-        // updates the model
-        makeModel()
+        allMoves.append(MoveData(playerX: playerNode.position.x, playerY: playerNode.position.y, enemyX: enemyNode.position.x, enemyY: enemyNode.position.y, missileX: Double(missileNode?.position.x ?? -1.0), missileY: Double(missileNode?.position.y ?? -1.0), enemyMissileX: Double(enemyMissileNode?.position.x ?? -1.0), enemyMissileY: Double(enemyMissileNode?.position.y ?? -1.0), enemyMove: nextEnemyMove, outcome: playerWon ? 1.0 : 0.0))
+                        
+        
+        // RETRAIN!! THIS IS THe WHOLE GIMMICK
+        uploadGameData(allMoves)
         
         // reset game data
-        currentGame = GameData(playerMoves: [], enemyMoves: [], outcome: -1.0)
-    }
-
-    func addDataPoint(_ gameData: GameData) {
-        // sample feature vector ---> server
-        print("added all moves as a sample to model")
-        let array = convertGameDataToFeatureVector(currentGame, maxMoves: 1000)
-        sendFeatures(array, withLabel: "\(gameData.outcome)")
-    }
-
-    // add datapoint
-    func sendFeatures(_ array:[Double], withLabel label:String){
-        let baseURL = "\(SERVER_URL)/AddDataPoint"
-        let postUrl = URL(string: "\(baseURL)")
+        currentGameData = GameData(playerX: 0.0, playerY: 0.0, enemyX: 0.0, enemyY: 0.0, missileX: 0.0, missileY: 0.0, enemyMissileX: 0.0, enemyMissileY: 0.0, enemyPotentialMove: "")
         
-        // create a custom HTTP POST request
-        var request = URLRequest(url: postUrl!)
-        
-        // data to send in body of post request (send arguments as json)
-        let jsonUpload:NSDictionary = ["feature":array,
-                                       "label":"\(label)"]
-        
-        
-        let requestBody:Data? = self.convertDictionaryToData(with:jsonUpload)
-        
-        request.httpMethod = "POST"
-        request.httpBody = requestBody
-        
-        let postTask : URLSessionDataTask = self.session.dataTask(with: request,
-            completionHandler:{(data, response, error) in
-                if(error != nil){
-                    if let res = response{
-                        print("Response:\n",res)
-                    }
+        func downloadAndLoadModel() {
+            downloadLatestCoreMLModel { localURL in
+                guard let url = localURL else {
+                    print("Failed to download the model")
+                    return
                 }
-                else{
-                    let jsonDictionary = self.convertDataToDictionary(with: data)
-                    
-                    print(jsonDictionary["feature"]!)
-                    print(jsonDictionary["label"]!)
-                }
-
-        })
-        
-        postTask.resume() // start the task
+                print("url:", url)
+                self.gameAIManager.loadModel(from: url)
+            }
+        }
+        downloadAndLoadModel()
     }
     
-    // CHANGE from KNN to XGB
-    func changeModel(to model:String) {
-        let baseURL = "\(SERVER_URL)/ChangeModel"
-        let postUrl = URL(string: "\(baseURL)")
+    func openSyncedRealm() async throws -> Realm  {
+        let realm = try! await openFlexibleSyncRealm()
         
-        // create a custom HTTP POST request
-        var request = URLRequest(url: postUrl!)
+        // Opening a realm and accessing it must be done from the same thread.
+        // Marking this function as `@MainActor` avoids threading-related issues.
+        @MainActor
+        func openFlexibleSyncRealm() async throws  -> Realm {
+            let user = app.currentUser
+            var config = user!.flexibleSyncConfiguration()
+            // Pass object types to the Flexible Sync configuration
+            // as a temporary workaround for not being able to add complete schema
+            // for a Flexible Sync app
+            config.objectTypes = [leaderboard.self, leaderboard_additionalStats.self]
+            let realm = try await Realm(configuration: config, downloadBeforeOpen: .always)
+            print("Successfully opened realm: \(realm)")
+            return realm
+        }
         
-        // data to send in body of post request (send arguments as json)
-        let jsonUpload:NSDictionary = ["model":model]
-        
-        let requestBody:Data? = self.convertDictionaryToData(with:jsonUpload)
-        
-        request.httpMethod = "POST"
-        request.httpBody = requestBody
-        
-        let postTask : URLSessionDataTask = self.session.dataTask(with: request,
-                                                                  completionHandler:{
-            (data, response, error) in
-            if(error != nil){
-                if let res = response{
-                    print("Response:\n",res)
-                }
-            }
-            else{ // no error we are aware of
-                let jsonDictionary = self.convertDataToDictionary(with: data)
-                
-                let r = jsonDictionary["to"]!
-                print(r)
-                //self.model = "\(r)"
-            }
-                                                                    
-        })
-        
-        postTask.resume() // start the task
+        return realm
     }
     
-    // ENEMY predicts to move left or right based on array: all the current moves in this match
-    func getPrediction(_ array:[Double]){
-        let baseURL = "\(SERVER_URL)/PredictOne"
-        let postUrl = URL(string: "\(baseURL)")
-        
-        // create a custom HTTP POST request
-        var request = URLRequest(url: postUrl!)
-        
-        // data to send in body of post request (send arguments as json)
-        let jsonUpload:NSDictionary = ["feature":array]
-        
-        
-        let requestBody:Data? = self.convertDictionaryToData(with:jsonUpload)
-        
-        request.httpMethod = "POST"
-        request.httpBody = requestBody
-        
-        let postTask : URLSessionDataTask = self.session.dataTask(with: request,
-                                                                  completionHandler:{
-            (data, response, error) in
-            if(error != nil){
-                if let res = response{
-                    print("Response:\n",res)
+    func addDataPoint() async {
+        do {
+            let realm = try await openSyncedRealm()
+            let subscriptions = realm.subscriptions
+            let foundSubscription = subscriptions.first(named: "all_leaderboards")
+            try await subscriptions.update {
+                if foundSubscription != nil {
+                    foundSubscription!.updateQuery(toType: leaderboard.self)
+                } else {
+                    subscriptions.append(QuerySubscription<leaderboard>(name: "all_leaderboards"))
                 }
             }
-            else{ // no error we are aware of
-                let jsonDictionary = self.convertDataToDictionary(with: data)
-                
-                let r = jsonDictionary["prediction"]!
-                print(r)
-                self.nextEnemyMove = "\(r)"
+            
+            gameAIManager.fetchLatestModelVersion()
+            let newScore = leaderboard()
+            newScore.aiVersion = "\(gameAIManager.latestModelVersion ?? -1)"
+            newScore.beatTime = Date()
+            newScore.userName = "placeholder" //await getUserName()
+            try realm.write {
+                realm.add(newScore)
             }
-                                                                    
-        })
-        
-        postTask.resume() // start the task
-    }
-    
-    // updates the model (probably should change the name)
-    func makeModel() {
-        
-        // create a GET request for server to update the ML model with current data
-        let baseURL = "\(SERVER_URL)/UpdateModel"
-        let query = "?dsid=69"
-        
-        let getUrl = URL(string: baseURL+query)
-        let request: URLRequest = URLRequest(url: getUrl!)
-        let dataTask : URLSessionDataTask = self.session.dataTask(with: request,
-              completionHandler:{(data, response, error) in
-                // handle error!
-                if (error != nil) {
-                    if let res = response{
-                        print("Response:\n",res)
-                    }
-                }
-                else{
-                    let jsonDictionary = self.convertDataToDictionary(with: data)
-                    
-                    if let resubAcc = jsonDictionary["resubAccuracy"]{
-                        print("Resubstitution Accuracy is", resubAcc)
-                    }
-                }
-                                                                    
-        })
-        
-        dataTask.resume() // start the task
-        
-    }
-    
-    //MARK: JSON Conversion Functions
-    func convertDictionaryToData(with jsonUpload:NSDictionary) -> Data?{
-        do { // try to make JSON and deal with errors using do/catch block
-            let requestBody = try JSONSerialization.data(withJSONObject: jsonUpload, options:JSONSerialization.WritingOptions.prettyPrinted)
-            return requestBody
         } catch {
-            print("json error: \(error.localizedDescription)")
-            return nil
+            print("Failed to write to realm: \(error.localizedDescription)")
         }
     }
     
-    func convertDataToDictionary(with data:Data?)->NSDictionary{
-        do { // try to parse JSON and deal with errors using do/catch block
-            let jsonDictionary: NSDictionary =
-                try JSONSerialization.jsonObject(with: data!,
-                                              options: JSONSerialization.ReadingOptions.mutableContainers) as! NSDictionary
-            
-            return jsonDictionary
-            
-        } catch {
-            
-            if let strData = String(data:data!, encoding:String.Encoding(rawValue: String.Encoding.utf8.rawValue)){
-                            print("printing JSON received as string: "+strData)
-            }else{
-                print("json error: \(error.localizedDescription)")
+    func getUserName() async -> String? {
+        do {
+            let realm = try await openSyncedRealm()
+            let subscriptions = realm.subscriptions
+            let foundSubscription = subscriptions.first(named: "all_users")
+            try await subscriptions.update {
+                if foundSubscription != nil {
+                    foundSubscription!.updateQuery(toType: users.self)
+                } else {
+                    
+                    subscriptions.append(
+                        QuerySubscription<users>(name: "all_users") {
+                            $0.user_id == app.currentUser?.id ?? ""
+                        })
+                }
             }
-            return NSDictionary() // just return empty
+            
+            return realm.objects(users.self).first?.username
+        } catch {
+            print("Failed to write to realm: \(error.localizedDescription)")
         }
+        
+        return ""
     }
+    
+    
+    
     override func didMove(to view: SKView) {
         // spritekit stuff
         cellSize = view.frame.width / CGFloat(gridSize)
@@ -354,7 +297,7 @@ class GameScene2: SKScene, URLSessionDelegate {
         playerNode.alpha = 1.0
         playerNode.isHidden = false
         playerNode.color = SKColor.red
-
+        
         addChild(playerNode)
         
         playerNode.physicsBody = SKPhysicsBody(rectangleOf: playerNode.size)
@@ -374,51 +317,62 @@ class GameScene2: SKScene, URLSessionDelegate {
         enemyNode.physicsBody?.contactTestBitMask = PhysicsCategory.missile
         enemyNode.physicsBody?.collisionBitMask = PhysicsCategory.none
         enemyNode.physicsBody?.affectedByGravity = false
-
+        
         physicsWorld.contactDelegate = self
-
+        
         // Set initial positions
         updateNodePositions()
         
         createGrid()
+        
+        func downloadAndLoadModel() {
+            downloadLatestCoreMLModel { localURL in
+                guard let url = localURL else {
+                    print("Failed to download the model")
+                    return
+                }
+                print("starting game. url of local model:", url)
+                self.gameAIManager.loadModel(from: url)
+            }
+        }
+        downloadAndLoadModel()
+        
     }
     
     func createGrid() {
         let gridNode = SKNode()
         addChild(gridNode)
-
+        
         for i in 0...gridSize {
             let xPos = CGFloat(i) * cellSize
             let yPos = CGFloat(i) * cellSize
-
+            
             // Vertical line
             let verticalLine = SKShapeNode(path: CGPath(rect: CGRect(x: xPos, y: 0, width: 1, height: gridHeight), transform: nil))
             verticalLine.strokeColor = SKColor.black
             gridNode.addChild(verticalLine)
-
+            
             // Horizontal line
             let horizontalLine = SKShapeNode(path: CGPath(rect: CGRect(x: 0, y: yPos, width: size.width, height: 1), transform: nil))
             horizontalLine.strokeColor = SKColor.black
             gridNode.addChild(horizontalLine)
         }
-
+        
         // Center the grid vertically
         let yOffset = (size.height - gridHeight) / 2
         gridNode.position = CGPoint(x: 0, y: yOffset)
     }
-
-
+    
+    
     override func update(_ currentTime: TimeInterval) {
         updateNodePositions()
-
-        checkForCollisions()
     }
-
+    
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard let touch = touches.first else { return }
         if !playerCanMove { return }
         let location = touch.location(in: self)
-
+        
         if location.x < frame.midX {
             // Move left
             playerDidMove(.left)
@@ -426,14 +380,14 @@ class GameScene2: SKScene, URLSessionDelegate {
             // Move right
             playerDidMove(.right)
         }
-
+        
         // Handle missile logic
         handleMissileLogic()
     }
     
     func handleMissileLogic() {
         tapCount += 1
-
+        
         if tapCount % 5 == 0 {
             spawnMissile()
         }
@@ -441,7 +395,7 @@ class GameScene2: SKScene, URLSessionDelegate {
         if tapCount % 7 == 0 {
             spawnEnemyMissile()
         }
-
+        
         // Move missile
         moveMissile()
     }
@@ -464,7 +418,7 @@ class GameScene2: SKScene, URLSessionDelegate {
         // Move missile upwards
         if let missilePos = missilePosition {
             missilePosition = CGPoint(x: missilePos.x, y: missilePos.y + 1)
-
+            
             // Check if missile is off the grid
             if missilePos.y >= CGFloat(gridSize) {
                 missilePosition = nil
@@ -473,7 +427,7 @@ class GameScene2: SKScene, URLSessionDelegate {
         
         if let enemyMissilePos = enemyMissilePosition {
             enemyMissilePosition = CGPoint(x: enemyMissilePos.x, y: enemyMissilePos.y - 1)
-
+            
             // Check if missile is off the grid
             if enemyMissilePos.y < 0 {
                 enemyMissilePosition = nil
@@ -484,7 +438,8 @@ class GameScene2: SKScene, URLSessionDelegate {
     func updateNodePositions() {
         // Update player position
         playerNode.position = positionForGridPoint(playerPosition)
-
+        //print("player: ", playerNode.position)
+        
         // Update missile position if it exists
         if let missilePos = missilePosition {
             if missileNode == nil {
@@ -492,6 +447,7 @@ class GameScene2: SKScene, URLSessionDelegate {
                 addChild(missileNode!)
             }
             missileNode!.position = positionForGridPoint(missilePos)
+            //print("missile: ", missileNode.position)
         } else {
             missileNode?.removeFromParent()
             missileNode = nil
@@ -503,35 +459,33 @@ class GameScene2: SKScene, URLSessionDelegate {
                 addChild(enemyMissileNode!)
             }
             enemyMissileNode!.position = positionForGridPoint(enemyMisslePos)
+            //print("enemyMissile: ", enemyMissileNode.position)
         } else {
             enemyMissileNode?.removeFromParent()
             enemyMissileNode = nil
         }
-
-     
+        
+        
         enemyNode.position = positionForGridPoint(enemyPosition)
-
+        //print("enemy: ", enemyNode.position)
+        
     }
-
+    
     func positionForGridPoint(_ point: CGPoint) -> CGPoint {
         // Determine the size of each grid cell
         let cellWidth = size.width / CGFloat(gridSize)
         let cellHeight = cellWidth // Since the height should match the width
-
+        
         // Calculate the x and y position
         let xPosition = (point.x * cellWidth) + (cellWidth / 2) // Center of the cell
         let yPosition = (point.y * cellHeight) + (cellHeight / 2) // Center of the cell
-
+        
         // Return the calculated position
-        let yOffset = (size.height - gridHeight) / 2
+        let yOffset = (size.height - gridHeight) / 2 + 10
         return CGPoint(x: xPosition, y: yPosition + yOffset)
     }
-
-
-    func checkForCollisions() {
-   
-    }
-
+    
+    
     // Other methods...
     func createMissileNode() -> SKSpriteNode {
         let missile = SKSpriteNode(imageNamed: "fireball")
@@ -539,7 +493,7 @@ class GameScene2: SKScene, URLSessionDelegate {
         missile.zPosition = 1 // Ensure it's visible above other nodes
         missile.size = CGSize(width: cellSize - 2, height: cellSize - 2) // Set the size as needed
         missile.zRotation = CGFloat.pi // Rotate 180 degrees
-
+        
         missile.physicsBody = SKPhysicsBody(rectangleOf: missile.size) // or use `circleOfRadius` if more appropriate
         missile.physicsBody?.categoryBitMask = PhysicsCategory.missile
         missile.physicsBody?.contactTestBitMask = PhysicsCategory.enemy
@@ -555,42 +509,69 @@ class GameScene2: SKScene, URLSessionDelegate {
         enemyMissile.name = "enemyMissile"
         enemyMissile.zPosition = 1  // Adjust as needed
         enemyMissile.size = CGSize(width: cellSize - 2, height: cellSize - 2) // Set the size as needed
-
+        
         // Set up physics body for collision detection, if needed
         enemyMissile.physicsBody = SKPhysicsBody(rectangleOf: enemyMissile.size)
         enemyMissile.physicsBody?.categoryBitMask = PhysicsCategory.missile
         enemyMissile.physicsBody?.contactTestBitMask = PhysicsCategory.player
         enemyMissile.physicsBody?.collisionBitMask = 0
         enemyMissile.physicsBody?.affectedByGravity = false
-
+        
         return enemyMissile
     }
-
     
-    func convertGameDataToFeatureVector(_ gameData: GameData, maxMoves: Int) -> [Double] {
-        var featureVector = [Double]()
-
-        // Interleave player and enemy moves
-        for index in 0..<maxMoves {
-            if index < gameData.playerMoves.count {
-                featureVector.append(gameData.playerMoves[index].numericValue)
-            } else {
-                featureVector.append(0) // Pad with 0 if no move
+    
+    func uploadGameData(_ gameData: [MoveData]) {
+        let url = URL(string: flask_app_url + "/upload_game_data")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        do {
+            // Encode your array of MoveData to JSON
+            let jsonData = try JSONEncoder().encode(gameData)
+            request.httpBody = jsonData
+        } catch {
+            print("Error encoding game data: \(error)")
+            return
+        }
+        
+        let task = URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                print("Error during upload: \(error)")
+                return
             }
-
-            if index < gameData.enemyMoves.count {
-                featureVector.append(gameData.enemyMoves[index].numericValue + 2) // +2 to differentiate enemy moves
+            guard let data = data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let success = json["success"] as? Bool else {
+                print("Failed to parse response or response missing 'success' key")
+                return
+            }
+            
+            if success {
+                print("Upload was successful")
             } else {
-                featureVector.append(0) // Pad with 0 if no move
+                print("Upload failed")
             }
         }
-
-        return featureVector
+        task.resume()
     }
-
     
     
-
+    
+    func downloadLatestCoreMLModel(completion: @escaping (URL?) -> Void) {
+        let url = URL(string: flask_app_url + "/get_latest_coreml_model")!
+        let task = URLSession.shared.downloadTask(with: url) { localURL, _, error in
+            guard let localURL = localURL, error == nil else {
+                print("Model download failed: \(error?.localizedDescription ?? "Unknown error")")
+                completion(nil)
+                return
+            }
+            completion(localURL)
+        }
+        task.resume()
+    }
+    
 }
 
 extension GameScene2: SKPhysicsContactDelegate {
@@ -600,13 +581,122 @@ extension GameScene2: SKPhysicsContactDelegate {
         
         if collision == PhysicsCategory.missile | PhysicsCategory.enemy {
             print("done")
-            endGame(playerWon: true)
+            playKillSound()
+            
+            if let fire = SKEmitterNode(fileNamed: "Fire") {
+                fire.position = enemyNode.position
+                addChild(fire)
+                
+                // Remove the emitter after duration of the fireworks
+                let wait = SKAction.wait(forDuration: 2.0)
+                let remove = SKAction.removeFromParent()
+                fire.run(SKAction.sequence([wait, remove]))
+            }
+            Task {
+                await endGame(playerWon: true)
+            }
             return
         }
         
         if (collision == PhysicsCategory.missile | PhysicsCategory.player) {
-            endGame(playerWon: false)
+            Task {
+                await endGame(playerWon: false)
+            }
             return
         }
     }
 }
+
+class GameAIManager {
+    var currentModel: MLModel?
+    var latestModelVersion: Int?
+    
+    func fetchLatestModelVersion() {
+        let realm = try! Realm()  // Make sure to handle errors in production code
+        
+        // Query the 'models' collection to find the latest version
+        if let latestModel = realm.objects(model.self).sorted(byKeyPath: "version", ascending: false).first {
+            latestModelVersion = latestModel.version
+            print("Latest model version: \(latestModel.version ?? -1)")
+        } else {
+            print("No models found in the database.")
+            latestModelVersion = nil
+        }
+    }
+    
+    func loadModel(from url: URL) {
+        do {
+            let coremlmodel = try MLModel(contentsOf: url)
+            self.currentModel = coremlmodel
+        } catch {
+            print("Error loading model: \(error)")
+        }
+    }
+    
+    func predictBestMove(gameData: GameData) -> String {
+        guard let _ = currentModel else {
+            print("Model not loaded")
+            return "left" // Default move
+        }
+        
+        // Predict for both moves
+        let predictionLeft = predictMove(gameData: gameData, move: "left")
+        let predictionRight = predictMove(gameData: gameData, move: "right")
+        
+        // Decide the best move
+        return chooseBestMove(predictionLeft: predictionLeft, predictionRight: predictionRight)
+    }
+    
+    private func predictMove(gameData: GameData, move: String) -> Double {
+        let featureProvider = prepareFeatureProvider(from: gameData, move: move)
+        
+        do {
+            guard let predictionOutput = try currentModel?.prediction(from: featureProvider) else { return 0.5 }
+            return handlePredictionResult(predictionOutput)
+        } catch {
+            print("Error during prediction: \(error)")
+            return -1 // Indicate an error
+        }
+    }
+    
+    private func prepareFeatureProvider(from gameData: GameData, move: String) -> MLFeatureProvider {
+        let featureValues: [String: MLFeatureValue] = [
+            "playerX": MLFeatureValue(double: gameData.playerX),
+            "playerY": MLFeatureValue(double: gameData.playerY),
+            "enemyX": MLFeatureValue(double: gameData.enemyX),
+            "enemyY": MLFeatureValue(double: gameData.enemyY),
+            "missileX": MLFeatureValue(double: gameData.missileX),
+            "missileY": MLFeatureValue(double: gameData.missileY),
+            "enemyMissileX": MLFeatureValue(double: gameData.enemyMissileX),
+            "enemyMissileY": MLFeatureValue(double: gameData.enemyMissileY),
+            "enemyPotentialMove": MLFeatureValue(string: move)
+        ]
+        return try! MLDictionaryFeatureProvider(dictionary: featureValues)
+    }
+    
+    
+    private func handlePredictionResult(_ predictionOutput: MLFeatureProvider) -> Double {
+        // Assuming the model outputs a feature named "enemyHitProbability"
+        let hitProbability = predictionOutput.featureValue(for: "enemyHitProbability")?.doubleValue ?? 0.0
+        return hitProbability
+    }
+    
+    
+    private func chooseBestMove(predictionLeft: Double, predictionRight: Double) -> String {
+        // Choose the move with the lower probability of being hit
+        return (predictionLeft < predictionRight) ? "left" : "right"
+    }
+    
+}
+
+
+class model: Object {
+    @Persisted(primaryKey: true) var _id: ObjectId
+    
+    @Persisted var model_file_url: String?
+    
+    @Persisted var upload_date: String?
+    
+    @Persisted var version: Int?
+}
+
