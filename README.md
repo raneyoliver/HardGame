@@ -1,5 +1,14 @@
 # Hard Game
 
+## Notes for the grader
+
+The third constraint is currently in a basic form. While the leaderboard successfully displays updates with new enemy defeats, the feature's refinement and polish are still in progress. However, the core functionality is operational.
+
+Regarding the fourth constraint, the foundational code is in place, but integration challenges have prevented full functionality. The model utilizes the "enemyHit" label as a substitute for "successful" or "not successful" outcomes. However, issues have arisen in the loading and storage of model versions, primarily due to various unexpected errors.
+
+Overall, the necessary code for the app's intended functions exists, but time constraints have hindered the seamless integration and error-free operation of these features. A significant portion of the development time was dedicated to mastering MongoDB functionalities, which limited the time available for implementing and storing the ML models in the cloud. The objective was to centralize all operations in the cloud, specifically using Google Cloud, to eliminate the need for users to run their own servers for ML training and to facilitate the app's deployment on the app store. Despite the challenges faced, this project has been a substantial learning experience, and it's hoped that the app's potential direction and progress are evident.
+
+
 Features:
 
 Login Screen: Allows users to create an account or log in. User data is managed using MongoDB Realm's Flexible Sync Realm.
@@ -26,11 +35,3 @@ This architecture creates a dynamic gaming experience where player interactions 
 # Architectural Diagram
 
 ![mermaid-diagram-2023-12-12-182251](https://github.com/raneyoliver/HardGame/assets/40372643/a87ebf39-0d7e-4735-9c24-ca9c94f4b629)
-
-# Notes for the grader
-
-The third constraint is currently in a basic form. While the leaderboard successfully displays updates with new enemy defeats, the feature's refinement and polish are still in progress. However, the core functionality is operational.
-
-Regarding the fourth constraint, the foundational code is in place, but integration challenges have prevented full functionality. The model utilizes the "enemyHit" label as a substitute for "successful" or "not successful" outcomes. However, issues have arisen in the loading and storage of model versions, primarily due to various unexpected errors.
-
-Overall, the necessary code for the app's intended functions exists, but time constraints have hindered the seamless integration and error-free operation of these features. A significant portion of the development time was dedicated to mastering MongoDB functionalities, which limited the time available for implementing and storing the ML models in the cloud. The objective was to centralize all operations in the cloud, specifically using Google Cloud, to eliminate the need for users to run their own servers for ML training and to facilitate the app's deployment on the app store. Despite the challenges faced, this project has been a substantial learning experience, and it's hoped that the app's potential direction and progress are evident.
