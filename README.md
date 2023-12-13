@@ -9,7 +9,7 @@ Regarding the fourth constraint, the foundational code is in place, but integrat
 Overall, the necessary code for the app's intended functions exists, but time constraints have hindered the seamless integration and error-free operation of these features. A significant portion of the development time was dedicated to mastering MongoDB functionalities, which limited the time available for implementing and storing the ML models in the cloud. The objective was to centralize all operations in the cloud, specifically using Google Cloud, to eliminate the need for users to run their own servers for ML training and to facilitate the app's deployment on the app store. Despite the challenges faced, this project has been a substantial learning experience, and it's hoped that the app's potential direction and progress are evident.
 
 
-Features:
+## Features:
 
 Login Screen: Allows users to create an account or log in. User data is managed using MongoDB Realm's Flexible Sync Realm.
 Game Screen: A turn-based game where players combat an AI enemy. The enemy's movements are determined by predictions from a CoreML model.
@@ -32,6 +32,6 @@ The CoreML model is retrained with new game data.
 Updated models are stored on GCP for future use.
 This architecture creates a dynamic gaming experience where player interactions directly influence the game's AI behavior, providing a continuously evolving challenge.
 
-# Architectural Diagram
+## Architectural Diagram
 
 ![mermaid-diagram-2023-12-12-182251](https://github.com/raneyoliver/HardGame/assets/40372643/a87ebf39-0d7e-4735-9c24-ca9c94f4b629)
