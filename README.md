@@ -1,55 +1,36 @@
-# SwiftUI Template App
+# Hard Game
 
-A todo list application built with the [Realm Swift SDK](https://www.mongodb.com/docs/realm/sdk/swift/) and [Atlas Device Sync](https://www.mongodb.com/docs/atlas/app-services/sync/).
+Features:
 
-You can follow along with the [SwiftUI Tutorial](https://www.mongodb.com/docs/atlas/app-services/tutorial/swiftui/) to see how to build, modify, and 
-run this template app.
+Login Screen: Allows users to create an account or log in. User data is managed using MongoDB Realm's Flexible Sync Realm.
+Game Screen: A turn-based game where players combat an AI enemy. The enemy's movements are determined by predictions from a CoreML model.
+Leaderboards Screen: Displays recent victors, showing usernames, the version of the ML model defeated, and the time/date of their victory. This data is stored in MongoDB Realm.
+CoreML Model Integration:
 
-This project uses Swift Package Manager (SPM) to load dependencies.
+The enemy's behavior is driven by a CoreML model.
+After each defeat of the enemy, the model is retrained.
+Model versions are stored on Google Cloud Platform (GCP).
+Backend and Data Management:
 
-## Configuration
+A Flask app on GCP handles several key functions:
+Retrieves the latest model metadata from MongoDB Realm.
+Fetches the latest scikit-learn random forest classifier model from a GCP bucket and converts it to a CoreML format.
+Manages the upload of game data for model retraining.
+Leaderboard data is updated in MongoDB Realm via requests from the Swift app each time an enemy is defeated.
+Model Retraining and Storage:
 
-For this template app to work, you must ensure that `App/atlasConfig.plist` exists and contains the following properties:
+The CoreML model is retrained with new game data.
+Updated models are stored on GCP for future use.
+This architecture creates a dynamic gaming experience where player interactions directly influence the game's AI behavior, providing a continuously evolving challenge.
 
-- **appId:** your Atlas App Services App ID.
-- **baseUrl:** the App Services backend URL. This should be https://realm.mongodb.com in most cases.
+# Architectural Diagram
 
-### Using the Atlas App Services UI
+![mermaid-diagram-2023-12-12-182251](https://github.com/raneyoliver/HardGame/assets/40372643/a87ebf39-0d7e-4735-9c24-ca9c94f4b629)
 
-The easiest way to use this template app is to log on to [Atlas App Services](https://realm.mongodb.com/) and click the **Create App From Template** button. Choose 
-**Real Time Sync**, and then follow the prompts. While the backend app is being 
-created, you can download this SwiftUI template app pre-configured for your new 
-app.
+# Notes for the grader
 
-### Cloning from GitHub
+The third constraint is currently in a basic form. While the leaderboard successfully displays updates with new enemy defeats, the feature's refinement and polish are still in progress. However, the core functionality is operational.
 
-If you have cloned this repository from the GitHub
-[mongodb/template-app-swiftui-todo](https://github.com/mongodb/template-app-swiftui-todo.git)
-repository, you must create a separate App Services App with Device Sync
-enabled to use this client. You can find information about how to do this
-in the Atlas App Services documentation page:
-[Template Apps -> Create a Template App](https://www.mongodb.com/docs/atlas/app-services/reference/template-apps/)
+Regarding the fourth constraint, the foundational code is in place, but integration challenges have prevented full functionality. The model utilizes the "enemyHit" label as a substitute for "successful" or "not successful" outcomes. However, issues have arisen in the loading and storage of model versions, primarily due to various unexpected errors.
 
-Once you have created the App Services App, replace any value in this client's
-`appId` field with your App Services App ID. For help finding this ID, refer
-to: [Find Your Project or App Id](https://www.mongodb.com/docs/atlas/app-services/reference/find-your-project-or-app-id/)
-
-### Download the Client as a Zip File
-
-If you have downloaded this client as a .zip file from the Atlas App Services
-UI, it does not contain the App Services App ID. You must replace any value
-in this client's `appId` field in `App/atlasConfig.plist` with your App Services
-App ID. For help finding this ID, refer to:
-[Find Your Project or App Id](https://www.mongodb.com/docs/atlas/app-services/reference/find-your-project-or-app-id/)
-
-If you did not replace the App ID, you may see an `Error: unsupported URL` message.
-
-## Run the app
-
-- Open App.xcodeproj in Xcode.
-- Wait for SPM to download dependencies.
-- Press "Run".
-
-## Issues
-
-Please report issues with the template at https://github.com/mongodb-university/realm-template-apps/issues/new
+Overall, the necessary code for the app's intended functions exists, but time constraints have hindered the seamless integration and error-free operation of these features. A significant portion of the development time was dedicated to mastering MongoDB functionalities, which limited the time available for implementing and storing the ML models in the cloud. The objective was to centralize all operations in the cloud, specifically using Google Cloud, to eliminate the need for users to run their own servers for ML training and to facilitate the app's deployment on the app store. Despite the challenges faced, this project has been a substantial learning experience, and it's hoped that the app's potential direction and progress are evident.
