@@ -1,3 +1,6 @@
+github link: https://github.com/raneyoliver/HardGame
+Team Members: Oliver Raney
+
 # Hard Game
 
 ![79735](https://github.com/raneyoliver/HardGame/assets/40372643/9a45c0bb-fcf0-46b1-a6c0-bf907ccd90ed)
